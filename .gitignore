@@ -1,11 +1,11 @@
 .DS_Store
 
-.idea
-.vscode
+.idea/
+.vscode/
 
 .env/
-env/
 .venv/
+env/
 venv/
 
 *.pyc
