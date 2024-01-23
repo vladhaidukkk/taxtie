@@ -1,6 +1,8 @@
-import json
 import sqlite3
 from pathlib import Path
+
+from starlette.requests import Request
+from starlette.responses import PlainTextResponse
 
 
 async def app(scope, receive, send):
@@ -15,43 +17,33 @@ async def app(scope, receive, send):
                 await send({"type": "lifespan.shutdown.complete"})
                 break
     else:
-        assert scope["type"] == "http"
-        content_type = next(
-            (value for header, value in scope["headers"] if header == b"content-type"),
-            None,
-        )
-        assert content_type == b"application/json"
-        db = scope["state"]["db"]
-
-        msg = await receive()
-        data = json.loads(msg["body"])
+        request = Request(scope, receive)
+        assert request["type"] == "http", request["type"]
+        assert request.headers["content-type"] == "application/json", request.headers[
+            "content-type"
+        ]
+        data = await request.json()
 
         if "username" in data and "password" in data:
-            cur = db.cursor()
+            cur = request.state.db.cursor()
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS user (
+                    id INTEGER PRIMARY KEY,
+                    username TEXT NOT NULL,
+                    password TEXT NOT NULL
+                )
+                """
+            )
             cur.execute(
                 "INSERT INTO user (username, password) VALUES (?, ?)",
                 (data["username"], data["password"]),
             )
-            db.commit()
+            request.state.db.commit()
             cur.close()
 
-            status = 201
-            response = b"user is successfully registered"
+            response = PlainTextResponse("user is successfully registered", 201)
         else:
-            status = 422
-            response = b"'username' and 'password' are required"
+            response = PlainTextResponse("'username' and 'password' are required", 422)
 
-        await send(
-            {
-                "type": "http.response.start",
-                "status": status,
-                "headers": [(b"content-type", b"text/plain")],
-            }
-        )
-        await send(
-            {
-                "type": "http.response.body",
-                "body": response,
-                "more_body": False,
-            }
-        )
+        await response(scope, receive, send)
