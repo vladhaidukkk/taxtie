@@ -5,7 +5,7 @@ from sqlite3 import Connection
 
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
-from starlette.routing import Mount, Route, Router
+from starlette.routing import Mount, Route, Router, WebSocketRoute
 from starlette.types import Receive, Scope, Send
 from starlette.websockets import WebSocket
 
@@ -57,6 +57,14 @@ async def register(request: Request):
     return PlainTextResponse(f"user {user[:2]} is successfully registered", 201)
 
 
+async def ws_index(websocket: WebSocket):
+    await websocket.accept()
+    async for text in websocket.iter_text():
+        await websocket.send_text(f"Reply: {text}")
+    print("Disconnected by", websocket.client)
+    await websocket.close()
+
+
 async def app(scope: Scope, receive: Receive, send: Send):
     if scope["type"] == "lifespan":
         while True:
@@ -68,7 +76,7 @@ async def app(scope: Scope, receive: Receive, send: Send):
                 scope["state"]["db"].close()
                 await send({"type": "lifespan.shutdown.complete"})
                 break
-    elif scope["type"] == "http":
+    else:
         router = Router(
             routes=[
                 Route("/", index),
@@ -78,13 +86,7 @@ async def app(scope: Scope, receive: Receive, send: Send):
                         Route("/register", register, methods=["POST"]),
                     ],
                 ),
+                WebSocketRoute("/", ws_index),
             ]
         )
         await router(scope, receive, send)
-    else:
-        websocket = WebSocket(scope, receive, send)
-        await websocket.accept()
-        async for text in websocket.iter_text():
-            await websocket.send_text(f"Reply: {text}")
-        print("Disconnected by", websocket.client)
-        await websocket.close()
