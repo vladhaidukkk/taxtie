@@ -1,8 +1,12 @@
 import sqlite3
 from pathlib import Path
 
+from starlette.middleware.errors import ServerErrorMiddleware
+from starlette.middleware.exceptions import ExceptionMiddleware
+from starlette.requests import Request
+from starlette.responses import PlainTextResponse
 from starlette.routing import Mount, Router
-from starlette.types import Receive, Scope, Send
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.http import routes as http_routes
 from app.ws import routes as ws_routes
@@ -31,3 +35,24 @@ async def app(scope: Scope, receive: Receive, send: Send):
             ]
         )
         await router(scope, receive, send)
+
+
+class PrintClientMiddleware:
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        print("Connected by", scope["client"])
+        await self.app(scope, receive, send)
+
+
+def server_error_handler(request: Request, exc: Exception):
+    return PlainTextResponse("Oops.", 500)
+
+
+app = ServerErrorMiddleware(
+    PrintClientMiddleware(
+        ExceptionMiddleware(app),
+    ),
+    handler=server_error_handler,
+)
