@@ -2,11 +2,10 @@ import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 from sqlite3 import Connection
-from typing import Sequence
 
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
-from starlette.routing import BaseRoute, Match, Mount, Route
+from starlette.routing import Mount, Route, Router
 from starlette.types import Receive, Scope, Send
 from starlette.websockets import WebSocket
 
@@ -58,22 +57,6 @@ async def register(request: Request):
     return PlainTextResponse(f"user {user[:2]} is successfully registered", 201)
 
 
-def find_route(scope: Scope, routes: Sequence[BaseRoute]):
-    for route in routes:
-        match, details = route.matches(scope)
-        if match is Match.NONE:
-            continue
-        if hasattr(route, "routes"):
-            prefix = details["app_root_path"] + details["root_path"]
-            scope["path"] = scope["path"].removeprefix(prefix)
-            found = find_route(scope, route.routes)
-            if found:
-                return found
-        else:
-            return route
-    return None
-
-
 async def app(scope: Scope, receive: Receive, send: Send):
     if scope["type"] == "lifespan":
         while True:
@@ -86,22 +69,18 @@ async def app(scope: Scope, receive: Receive, send: Send):
                 await send({"type": "lifespan.shutdown.complete"})
                 break
     elif scope["type"] == "http":
-        routes = [
-            Route("/", index),
-            Mount(
-                "/auth",
-                routes=[
-                    Route("/register", register, methods=["POST"]),
-                ],
-            ),
-        ]
-        route = find_route(scope, routes)
-
-        if route:
-            await route.handle(scope, receive, send)
-        else:
-            response = PlainTextResponse("Not found", 404)
-            await response(scope, receive, send)
+        router = Router(
+            routes=[
+                Route("/", index),
+                Mount(
+                    "/auth",
+                    routes=[
+                        Route("/register", register, methods=["POST"]),
+                    ],
+                ),
+            ]
+        )
+        await router(scope, receive, send)
     else:
         websocket = WebSocket(scope, receive, send)
         await websocket.accept()
