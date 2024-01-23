@@ -3,7 +3,7 @@ from pathlib import Path
 
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
-from starlette.websockets import WebSocket, WebSocketDisconnect
+from starlette.websockets import WebSocket
 
 
 async def app(scope, receive, send):
@@ -50,12 +50,7 @@ async def app(scope, receive, send):
     else:
         websocket = WebSocket(scope, receive, send)
         await websocket.accept()
-        while True:
-            try:
-                text = await websocket.receive_text()
-            except WebSocketDisconnect:
-                break
-            else:
-                await websocket.send_text(f"Reply: {text}")
+        async for text in websocket.iter_text():
+            await websocket.send_text(f"Reply: {text}")
         print("Disconnected by", websocket.client)
         await websocket.close()
