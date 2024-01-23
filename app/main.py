@@ -5,6 +5,7 @@ from sqlite3 import Connection
 
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
+from starlette.routing import Match, Route
 from starlette.types import Receive, Scope, Send
 from starlette.websockets import WebSocket
 
@@ -20,7 +21,11 @@ def execute_query(conn: Connection, query: str, params=()):
         cur.close()
 
 
-async def index(request: Request):
+def index(request: Request):
+    return PlainTextResponse("Hello world!")
+
+
+async def register(request: Request):
     db = request.state.db
     data = await request.json()
 
@@ -64,9 +69,23 @@ async def app(scope: Scope, receive: Receive, send: Send):
                 await send({"type": "lifespan.shutdown.complete"})
                 break
     elif scope["type"] == "http":
-        request = Request(scope, receive)
-        response = await index(request)
-        await response(scope, receive, send)
+        routes = [
+            Route("/", index),
+            Route("/register", register, methods=["POST"]),
+        ]
+
+        for route in routes:
+            match, _ = route.matches(scope)
+            if match is not Match.NONE:
+                break
+        else:
+            route = None
+
+        if route:
+            await route.handle(scope, receive, send)
+        else:
+            response = PlainTextResponse("Not found")
+            await response(scope, receive, send)
     else:
         websocket = WebSocket(scope, receive, send)
         await websocket.accept()
