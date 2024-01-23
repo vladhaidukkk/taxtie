@@ -18,7 +18,6 @@ async def app(scope, receive, send):
                 break
     else:
         request = Request(scope, receive)
-        assert request["type"] == "http", request["type"]
         assert request.headers["content-type"] == "application/json", request.headers[
             "content-type"
         ]
