@@ -65,6 +65,7 @@ class AllowCORSMiddleware:
             except StopIteration:
                 pass
             else:
+                origin = "*" if "*" in self.origins else origin
                 if origin in self.origins:
                     message["headers"].append(
                         (b"access-control-allow-origin", origin.encode())
@@ -80,7 +81,7 @@ app = ServerErrorMiddleware(
     PrintClientMiddleware(
         AllowCORSMiddleware(
             ExceptionMiddleware(app),
-            origins=["null"],
+            origins=["*"],
         )
     ),
     handler=server_error_handler,
