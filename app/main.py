@@ -2,6 +2,7 @@ import sqlite3
 from pathlib import Path
 
 from starlette.routing import Mount, Router
+from starlette.staticfiles import StaticFiles
 from starlette.types import Receive, Scope, Send
 
 from app.http import routes as http_routes
@@ -30,6 +31,9 @@ async def app(scope: Scope, receive: Receive, send: Send):
             routes=[
                 *http_routes,
                 Mount("/ws", routes=ws_routes, name="ws"),
+                Mount(
+                    "/static", StaticFiles(directory="static", html=True), name="static"
+                ),
             ]
         )
         await router(scope, receive, send)
