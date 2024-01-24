@@ -1,10 +1,12 @@
 from starlette.endpoints import HTTPEndpoint
 from starlette.exceptions import HTTPException
+from starlette.middleware import Middleware
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 
 from app.db import execute_query
+from app.middlewares import SessionAuthMiddleware
 
 
 class Register(HTTPEndpoint):
@@ -69,15 +71,12 @@ class Login(HTTPEndpoint):
 
 class Me(HTTPEndpoint):
     def get(self, request: Request):
-        if not request.session:
-            raise HTTPException(403, "You're not logged in")
-        id = request.session.get("id")
-        username = request.session.get("username")
-        return PlainTextResponse(f"ID: {id}, Username: {username}")
+        user = request.scope["user"]
+        return PlainTextResponse(f"ID: {user["id"]}, Username: {user["username"]}")
 
 
 routes = [
     Route("/register", Register),
     Route("/login", Login),
-    Route("/me", Me),
+    Route("/me", Me, middleware=[Middleware(SessionAuthMiddleware)]),
 ]

@@ -1,3 +1,4 @@
+from starlette.exceptions import HTTPException
 from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.middleware.errors import ServerErrorMiddleware
@@ -6,6 +7,8 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
+
+from app.db import execute_query
 
 
 def print_client_middleware(app: ASGIApp):
@@ -56,3 +59,30 @@ def apply_middlewares(app: ASGIApp):
             cls, args, kwargs = middleware
             app = cls(app, *args, **kwargs)
     return app
+
+
+class SessionAuthMiddleware:
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        session = scope["session"]
+        if not session:
+            raise HTTPException(403, "You're not logged in")
+
+        with execute_query(
+            scope["state"]["db"],
+            "SELECT * FROM user WHERE id = ?",
+            (session["id"],),
+        ) as cur:
+            user = cur.fetchone()
+
+        if not user:
+            raise HTTPException(403, "You're not logged in")
+
+        scope["user"] = {
+            "id": user[0],
+            "username": user[1],
+            "password": user[2],
+        }
+        await self.app(scope, receive, send)
