@@ -4,6 +4,7 @@ from pathlib import Path
 
 from starlette.middleware.errors import ServerErrorMiddleware
 from starlette.middleware.exceptions import ExceptionMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 from starlette.routing import Mount, Router
@@ -43,7 +44,8 @@ class PrintClientMiddleware:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send):
-        print("Connected by", scope["client"])
+        if scope["type"] in ("http", "ws"):
+            print("Connected by", scope["client"])
         await self.app(scope, receive, send)
 
 
@@ -77,10 +79,15 @@ def server_error_handler(request: Request, exc: Exception):
     return PlainTextResponse("Oops.", 500)
 
 
+SECRET_KEY = "707h2YjMQPk9PiZjyR+syARNKcE+Uop+8Blnm8gIR5o="
+
 app = ServerErrorMiddleware(
     PrintClientMiddleware(
         AllowCORSMiddleware(
-            ExceptionMiddleware(app),
+            SessionMiddleware(
+                ExceptionMiddleware(app),
+                secret_key=SECRET_KEY,
+            ),
             origins=["*"],
         )
     ),
