@@ -1,39 +1,44 @@
 import sqlite3
+from contextlib import asynccontextmanager
 from pathlib import Path
+from sqlite3 import Connection
+from typing import AsyncIterator, TypedDict
 
-from starlette.routing import Mount, Router
+from starlette.applications import Starlette
+from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
+from starlette.routing import Mount
 from starlette.staticfiles import StaticFiles
-from starlette.types import Receive, Scope, Send
 
 from app.http import routes as http_routes
-from app.middlewares import apply_middlewares
+from app.middlewares import PrintClientMiddleware
 from app.ws import routes as ws_routes
 
 
-async def lifespan(scope: Scope, receive: Receive, send: Send):
-    while True:
-        msg = await receive()
-        if msg["type"] == "lifespan.startup":
-            scope["state"]["db"] = sqlite3.connect(Path.cwd() / "db.sqlite")
-            await send({"type": "lifespan.startup.complete"})
-        elif msg["type"] == "lifespan.shutdown":
-            scope["state"]["db"].close()
-            await send({"type": "lifespan.shutdown.complete"})
-            break
+class State(TypedDict):
+    db: Connection
 
 
-@apply_middlewares
-async def app(scope: Scope, receive: Receive, send: Send):
-    if scope["type"] == "lifespan":
-        await lifespan(scope, receive, send)
-    else:
-        router = Router(
-            routes=[
-                *http_routes,
-                Mount("/ws", routes=ws_routes, name="ws"),
-                Mount(
-                    "/static", StaticFiles(directory="static", html=True), name="static"
-                ),
-            ]
-        )
-        await router(scope, receive, send)
+@asynccontextmanager
+async def lifespan(app: Starlette) -> AsyncIterator[State]:
+    db = sqlite3.connect(Path.cwd() / "db.sqlite")
+    yield {"db": db}
+    db.close()
+
+
+SECRET_KEY = "707h2YjMQPk9PiZjyR+syARNKcE+Uop+8Blnm8gIR5o="
+
+app = Starlette(
+    lifespan=lifespan,
+    middleware=[
+        Middleware(PrintClientMiddleware),
+        Middleware(CORSMiddleware),
+        Middleware(SessionMiddleware, secret_key=SECRET_KEY),
+    ],
+    routes=[
+        *http_routes,
+        Mount("/ws", routes=ws_routes, name="ws"),
+        Mount("/static", StaticFiles(directory="static", html=True), name="static"),
+    ],
+)
