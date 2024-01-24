@@ -2,6 +2,7 @@ import sqlite3
 from functools import partial
 from pathlib import Path
 
+from starlette.datastructures import Headers
 from starlette.middleware.errors import ServerErrorMiddleware
 from starlette.middleware.exceptions import ExceptionMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -50,7 +51,7 @@ class PrintClientMiddleware:
 
 
 class AllowCORSMiddleware:
-    def __init__(self, app: ASGIApp, origins: list | None = None):
+    def __init__(self, app: ASGIApp, origins: list[str] | None = None):
         self.app = app
         self.origins = origins if origins is not None else []
 
@@ -60,18 +61,12 @@ class AllowCORSMiddleware:
 
     async def send(self, message: Message, scope: Scope, send: Send):
         if message["type"] == "http.response.start":
-            try:
-                origin = next(
-                    (v for h, v in scope["headers"] if h == b"origin")
-                ).decode()
-            except StopIteration:
-                pass
-            else:
-                origin = "*" if "*" in self.origins else origin
-                if origin in self.origins:
-                    message["headers"].append(
-                        (b"access-control-allow-origin", origin.encode())
-                    )
+            headers = Headers(scope=scope)
+            origin = "*" if "*" in self.origins else headers.get("origin", None)
+            if origin and origin in self.origins:
+                message["headers"].append(
+                    (b"access-control-allow-origin", origin.encode())
+                )
         await send(message)
 
 
@@ -88,7 +83,7 @@ app = ServerErrorMiddleware(
                 ExceptionMiddleware(app),
                 secret_key=SECRET_KEY,
             ),
-            origins=["*"],
+            origins=["null"],
         )
     ),
     handler=server_error_handler,
