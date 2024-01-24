@@ -8,14 +8,13 @@ from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 
-class PrintClientMiddleware:
-    def __init__(self, app: ASGIApp):
-        self.app = app
-
-    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+def print_client_middleware(app: ASGIApp):
+    async def wrapper(scope: Scope, receive: Receive, send: Send):
         if scope["type"] in ("http", "ws"):
             print("Connected by", scope["client"])
-        await self.app(scope, receive, send)
+        await app(scope, receive, send)
+
+    return wrapper
 
 
 class AllowCORSMiddleware(BaseHTTPMiddleware):
@@ -45,11 +44,15 @@ SECRET_KEY = "707h2YjMQPk9PiZjyR+syARNKcE+Uop+8Blnm8gIR5o="
 def apply_middlewares(app: ASGIApp):
     middlewares = [
         Middleware(ServerErrorMiddleware, handler=server_error_handler),
-        Middleware(PrintClientMiddleware),
+        print_client_middleware,
         Middleware(AllowCORSMiddleware, origins=["*"]),
         Middleware(SessionMiddleware, secret_key=SECRET_KEY),
         Middleware(ExceptionMiddleware),
     ]
-    for cls, args, kwargs in reversed(middlewares):
-        app = cls(app, *args, **kwargs)
+    for middleware in reversed(middlewares):
+        if callable(middleware):
+            app = middleware(app)
+        else:
+            cls, args, kwargs = middleware
+            app = cls(app, *args, **kwargs)
     return app
