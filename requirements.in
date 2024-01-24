@@ -1,2 +1,4 @@
 starlette
 uvicorn
+itsdangerous
+jinja2
