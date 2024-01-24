@@ -1,4 +1,5 @@
 import sqlite3
+from functools import partial
 from pathlib import Path
 
 from starlette.middleware.errors import ServerErrorMiddleware
@@ -6,7 +7,7 @@ from starlette.middleware.exceptions import ExceptionMiddleware
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 from starlette.routing import Mount, Router
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.http import routes as http_routes
 from app.ws import routes as ws_routes
@@ -46,13 +47,41 @@ class PrintClientMiddleware:
         await self.app(scope, receive, send)
 
 
+class AllowCORSMiddleware:
+    def __init__(self, app: ASGIApp, origins: list | None = None):
+        self.app = app
+        self.origins = origins if origins is not None else []
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        send = partial(self.send, scope=scope, send=send)
+        await self.app(scope, receive, send)
+
+    async def send(self, message: Message, scope: Scope, send: Send):
+        if message["type"] == "http.response.start":
+            try:
+                origin = next(
+                    (v for h, v in scope["headers"] if h == b"origin")
+                ).decode()
+            except StopIteration:
+                pass
+            else:
+                if origin in self.origins:
+                    message["headers"].append(
+                        (b"access-control-allow-origin", origin.encode())
+                    )
+        await send(message)
+
+
 def server_error_handler(request: Request, exc: Exception):
     return PlainTextResponse("Oops.", 500)
 
 
 app = ServerErrorMiddleware(
     PrintClientMiddleware(
-        ExceptionMiddleware(app),
+        AllowCORSMiddleware(
+            ExceptionMiddleware(app),
+            origins=["null"],
+        )
     ),
     handler=server_error_handler,
 )
