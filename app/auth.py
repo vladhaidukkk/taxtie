@@ -1,25 +1,52 @@
-import asyncio
-
-from starlette.background import BackgroundTask
+from starlette.authentication import (
+    AuthCredentials,
+    AuthenticationBackend,
+    AuthenticationError,
+    BaseUser,
+    requires,
+)
 from starlette.endpoints import HTTPEndpoint
 from starlette.exceptions import HTTPException
-from starlette.middleware import Middleware
-from starlette.requests import Request
+from starlette.requests import HTTPConnection, Request
 from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 
-from app.db import execute_query
-from app.middlewares import SessionAuthMiddleware
+from app.db import db, users
 
 
-async def print_new_user(username: str):
-    await asyncio.sleep(1)
-    print(f"{username} was registered")
+class User(BaseUser):
+    def __init__(self, id: int, username: str):
+        self.id = id
+        self.username = username
+
+    @property
+    def is_authenticated(self):
+        return True
+
+    @property
+    def display_name(self):
+        return self.username
+
+
+class SessionAuthBackend(AuthenticationBackend):
+    async def authenticate(self, conn: HTTPConnection):
+        user_id = conn.session.get("id")
+        if not user_id:
+            return
+
+        query = users.select().filter_by(id=user_id)
+        result = await db.fetch_one(query)
+
+        if not result:
+            raise AuthenticationError("Invalid credentials")
+
+        return AuthCredentials(["authenticated"]), User(result["id"], result["username"]
+                                                        )
 
 
 class Register(HTTPEndpoint):
+    @db.transaction()
     async def post(self, request: Request):
-        db = request.state.db
         data = await request.json()
 
         if "username" not in data:
@@ -27,37 +54,19 @@ class Register(HTTPEndpoint):
         if "password" not in data:
             return PlainTextResponse("'password' is required", 422)
 
-        with execute_query(
-            db,
-            """
-            CREATE TABLE IF NOT EXISTS user (
-                id INTEGER PRIMARY KEY,
-                username TEXT NOT NULL,
-                password TEXT NOT NULL
-            )
-            """,
-        ):
-            pass
+        query = users.insert().values(
+            username=data["username"], password=data["password"],
+        )
+        await db.execute(query)
 
-        with execute_query(
-            db,
-            "INSERT INTO user (username, password) VALUES (?, ?)",
-            (data["username"], data["password"]),
-        ) as cur:
-            cur.execute("SELECT * FROM user ORDER BY id DESC LIMIT 1")
-            user = cur.fetchone()
-
-        task = BackgroundTask(print_new_user, username=user[1])
         return PlainTextResponse(
-            f"user {user[:2]} is successfully registered",
+            f"user {data["username"]} is successfully registered",
             201,
-            background=task,
         )
 
 
 class Login(HTTPEndpoint):
     async def post(self, request: Request):
-        db = request.state.db
         data = await request.json()
 
         if "username" not in data:
@@ -65,31 +74,29 @@ class Login(HTTPEndpoint):
         if "password" not in data:
             return PlainTextResponse("'password' is required", 422)
 
-        with execute_query(
-            db,
-            "SELECT * FROM user WHERE username = ?",
-            (data["username"],),
-        ) as cur:
-            user = cur.fetchone()
+        query = users.select().filter_by(username=data["username"])
+        result = await db.fetch_one(query)
 
-        if not user or user[2] != data["password"]:
+        if not result or result["password"] != data["password"]:
             raise HTTPException(401, "Invalid 'username' or 'password'")
 
         request.scope["session"] = {
-            "id": user[0],
-            "username": user[1],
+            "id": result["id"],
+            "username": result["username"],
         }
-        return PlainTextResponse(f"Welcome, {user[1]}!", 200)
+        return PlainTextResponse(f"Welcome, {result[1]}!", 200)
 
 
 class Me(HTTPEndpoint):
+    @requires(["authenticated"])
     def get(self, request: Request):
-        user = request.scope["user"]
-        return PlainTextResponse(f"ID: {user["id"]}, Username: {user["username"]}")
+        return PlainTextResponse(
+            f"ID: {request.user.id}, Username: {request.user.username}"
+        )
 
 
 routes = [
     Route("/register", Register),
     Route("/login", Login),
-    Route("/me", Me, middleware=[Middleware(SessionAuthMiddleware)]),
+    Route("/me", Me),
 ]

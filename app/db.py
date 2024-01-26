@@ -1,30 +1,24 @@
-from contextlib import contextmanager
-from sqlite3 import Connection
-
-import sqlalchemy
+import sqlalchemy as sa
 from databases import Database
 
 from app import settings
 
 db = Database(settings.DATABASE_URL)
 
-metadata = sqlalchemy.MetaData()
+metadata = sa.MetaData()
 
-notes = sqlalchemy.Table(
-    "notes",
+users = sa.Table(
+    "users",
     metadata,
-    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
-    sqlalchemy.Column("title", sqlalchemy.String),
-    sqlalchemy.Column("body", sqlalchemy.String),
+    sa.Column("id", sa.Integer, primary_key=True),
+    sa.Column("username", sa.String, unique=True, nullable=False),
+    sa.Column("password", sa.String, nullable=False),
 )
 
-
-@contextmanager
-def execute_query(conn: Connection, query: str, params=()):
-    cur = conn.cursor()
-    try:
-        cur.execute(query, params)
-        conn.commit()
-        yield cur
-    finally:
-        cur.close()
+notes = sa.Table(
+    "notes",
+    metadata,
+    sa.Column("id", sa.Integer, primary_key=True),
+    sa.Column("title", sa.String),
+    sa.Column("body", sa.String),
+)
