@@ -1,3 +1,6 @@
+import asyncio
+
+from starlette.background import BackgroundTask
 from starlette.endpoints import HTTPEndpoint
 from starlette.exceptions import HTTPException
 from starlette.middleware import Middleware
@@ -7,6 +10,11 @@ from starlette.routing import Route
 
 from app.db import execute_query
 from app.middlewares import SessionAuthMiddleware
+
+
+async def print_new_user(username: str):
+    await asyncio.sleep(1)
+    print(f"{username} was registered")
 
 
 class Register(HTTPEndpoint):
@@ -39,7 +47,12 @@ class Register(HTTPEndpoint):
             cur.execute("SELECT * FROM user ORDER BY id DESC LIMIT 1")
             user = cur.fetchone()
 
-        return PlainTextResponse(f"user {user[:2]} is successfully registered", 201)
+        task = BackgroundTask(print_new_user, username=user[1])
+        return PlainTextResponse(
+            f"user {user[:2]} is successfully registered",
+            201,
+            background=task,
+        )
 
 
 class Login(HTTPEndpoint):
