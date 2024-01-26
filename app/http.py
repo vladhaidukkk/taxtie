@@ -34,6 +34,7 @@ class Index(HTTPEndpoint):
             request, "index.html", context={"notes": content}
         )
 
+    @db.transaction()
     async def post(self, request: Request):
         data = await request.json()
         query = notes.insert().values(
