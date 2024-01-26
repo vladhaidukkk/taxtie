@@ -3,3 +3,4 @@ uvicorn
 itsdangerous
 jinja2
 strawberry-graphql
+pyyaml
