@@ -4,3 +4,7 @@ itsdangerous
 jinja2
 strawberry-graphql
 pyyaml
+databases[asyncpg]
+alembic
+greenlet
+psycopg2

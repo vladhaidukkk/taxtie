@@ -7,5 +7,10 @@
 </head>
 <body>
     <h1>Hello world!</h1>
+    <ul>
+        {% for note in notes %}
+            <li>{{note.id}} {{note.title}} {{note.body}}</li>
+        {% endfor %}
+    </div>
 </body>
 </html>

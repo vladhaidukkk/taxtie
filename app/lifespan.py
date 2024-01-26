@@ -1,18 +1,18 @@
-import sqlite3
 from contextlib import asynccontextmanager
-from pathlib import Path
-from sqlite3 import Connection
 from typing import AsyncIterator, TypedDict
 
+from databases import Database
 from starlette.applications import Starlette
+
+from app.db import db
 
 
 class State(TypedDict):
-    db: Connection
+    db: Database
 
 
 @asynccontextmanager
 async def lifespan(app: Starlette) -> AsyncIterator[State]:
-    db = sqlite3.connect(Path.cwd() / "db.sqlite")
+    await db.connect()
     yield {"db": db}
-    db.close()
+    await db.disconnect()
