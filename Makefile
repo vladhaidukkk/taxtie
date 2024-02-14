@@ -1,10 +1,9 @@
-install:
-	@pip install -r requirements.txt -r requirements-dev.txt
+install-deps:
+	@pip install -r requirements.txt
 
-compile:
-	@rm -rf requirements*.txt
-	@pip-compile requirements.in
-	@pip-compile requirements-dev.in
+lock-deps:
+	@pip-compile --upgrade --output-file=requirements.txt
+	@pip-compile --extra dev --upgrade --output-file=requirements-dev.txt
 
-sync:
-	@pip-sync requirements*.txt
+sync-deps:
+	@pip-sync requirements-dev.txt
